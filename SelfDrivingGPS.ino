@@ -1,4 +1,7 @@
 /*Receiver Code*/
+/*GPS SETUP*/
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
@@ -12,9 +15,7 @@ const uint64_t pipe = 0xE8E8F0F0E1LL;
 #include <Wire.h>
 String passback = "";
 
-/*GPS SETUP*/
-#include <TinyGPS++.h>
-#include <SoftwareSerial.h>
+
 
 const int RXPin = 2; //= BLUE , YELLOW used to be 12
 const int TXPin = 3; //= WHITE, ORANGE used to be 13
@@ -39,6 +40,7 @@ int leftspeed = 255; //setmaximum speed, goes constant speed
 int rightspeed = 250;
 
 void setup() {
+
   /*TRANSCIEVER CODE*/
   //this allows the rover to listen for the gps coordinates
   radio.begin();
@@ -48,7 +50,6 @@ void setup() {
   radio.openReadingPipe(1, pipe);
   // Makes it so the rover is listening for the coordinates
   radio.startListening();
-  radio.printDetails();
 
   /* Sheild code */
   pinMode(rightMotorPin, OUTPUT);
@@ -62,107 +63,96 @@ void setup() {
   Serial.begin(9600);
 
   /*GPS SETUP*/
-  gpsSerial.begin(4800);
 
   //while (!radio.available()) {
-    //radioFunc();
-    //delay(20);
+  //radioFunc();
+  //delay(20);
   //  7}
+  gpsSerial.begin(4800);
 }
 boolean looper;
 
 void loop(void)
 {
-  if (radio.available()) {
-    bool done = false;
-    while (!done) {
-      done = radio.read(&gpsCord_Receive, sizeof(gpsCord_Receive));
-      for (int i = 0; i < 2; i++) {
-        Serial.print("Got Coordinates...");
-        Serial.print(gpsCord_Receive[i]);
-        Serial.print("   ");
-      }
-      Serial.println();
-    }
-  }
-  else {
-    Serial.println("Failed...");
-  }
-  delay(20);
-
-
-
-  /*SELF DRIVING METHOD*/
-  // selfDriving();
-
-  while (gps.course.deg() != 0) { //bearing is not true north; gps.course.deg()
-    gps.course.deg();
-    //then do the find out the turn north, and never does this again
-    forward(255, 200);
-    delay(10000);
-  }
-  //  //drive forward and see if getting close to the coordinate of latitude, if not go in reverse
-  while (fabs(bLat - rLat) > 0.001) {
-    if ((bLat - rLat) > 0) { //go north
-      selfDriving();
-    }
-    else if ((bLat - rLat) < 0) { //go south
-      //180 deg turn
-      turnLeft(leftspeed, rightspeed);
-      delay(2400);
-      selfDriving();
-    }
-  }
-  //  // then drive to find the the right latitude, once found, turn 90 degree, then drive till it finds the
-  //  // right longitude
-  turnLeft(leftspeed, rightspeed);
-  delay(1200);
-  while (fabs(bLng - rLng) > 0.001) {
-    if ((bLng - rLng) > 0) { //go east
-      selfDriving();
-    }
-    else if ((bLng - rLng) < 0) { //go west
-      //180 deg turn;
-      turnLeft(leftspeed, rightspeed);
-      delay(2400);
-      selfDriving();
-    }
-  }
-
-  boolean selfDrive = true;
-  int functionTime = millis();
   while (gpsSerial.available() > 0 )
   {
-    if (gps.encode(gpsSerial.read()))
-    {
-      rLat = gps.location.lat();
-      rLng = gps.location.lng();
-      Serial.print("Lat: ");
-      Serial.print(rLat, 4);
-      Serial.print(", ");
-      Serial.print("Lng: ");
-      Serial.print(rLng, 4);
+    updateGPS();//Get original GPS coordinates
+      delay(500);
+      if (radio.available()) {  //Receiving the coordinates from the beacon
+        bool done = false;
+        while (!done) {
+          done = radio.read(&gpsCord_Receive, sizeof(gpsCord_Receive));
+          for (int i = 0; i < 2; i++) {
+            Serial.print("Got Coordinates...");
+            Serial.print(gpsCord_Receive[i],6);
+            Serial.print("   ");
+            done = true;
+          }
+          Serial.println();
+        }
+      }
+      else {
+        Serial.println("Failed...");
+      }
+      delay(20);
+       bLat = gpsCord_Receive[0];
+       bLng = gpsCord_Receive[1];
+       Serial.println("bLat");
+        Serial.println(bLat);
+        Serial.println("bLng");
+        Serial.println(bLng);
+
+    int functionTime = millis();
+/*Using the beacon cooridantes and the Rover Coordinates to find the Beacon */
+    while (fabs(bLat - rLat) > 0.00001) {
+      if ((bLat - rLat) > 0) { //go north
+        Serial.println("Go north");
+        Serial.println("Lat");
+        Serial.println(rLat);
+        Serial.println("Long");
+        Serial.println(rLng);
+        selfDriving();
+      }
+      else if ((bLat - rLat) < 0) { //go south
+        //180 deg turn
+        Serial.println("GO south");
+        turnLeft(leftspeed, rightspeed);
+        delay(2400);
+        selfDriving();
+      }
     }
+    //  // then drive to find the the right latitude, once found, turn 90 degree, then drive till it finds the
+    //  // right longitude
+    turnLeft(leftspeed, rightspeed);
+    delay(1200);
+    while (fabs(bLng - rLng) > 0.00001) {
+      if ((bLng - rLng) > 0) { //go east
+        Serial.println("Go East");
+        selfDriving();
+      }
+      else if ((bLng - rLng) < 0) { //go west
+        //180 deg turn;
+        Serial.println("Go West");
+        turnLeft(leftspeed, rightspeed);
+        delay(2400);
+        selfDriving();
+      }
+    }
+
+    boolean selfDrive = true;
+
+    Serial.println(passback);
+    delay(500);
   }
-
-  Serial.println(passback);
-  delay(500);
-
-
-
-
-
-
-
 }
 
-/*  SELF DRIVING */
+/*  SELF DRIVING FUNCTION */
 
 void selfDriving() {
-
+  Serial.println("Self Drive");
   while (true) {
-    rLat = gps.location.lat();
-    rLng = gps.location.lng();
+    updateGPS(); //Keep the GPS coordinates Updated
+
     if (distance < 10 && distance > 0) { //If vehicle within 10 cm of something it stops,
       Serial.println("Collision Stopped "); //Delete THis
       stop();//stop for some time, then check the objects around iit
@@ -235,30 +225,21 @@ void selfDriving() {
         turnRight(leftspeed, rightspeed);
         delay(1200);
       }
-
-
       //  break; // to break out of the big while lop
     }
     else {
       forward(leftspeed, rightspeed);
+      delay(2000);
+
+      break;
     }
+    // }
   }
 }
 
-
-//METHODS FOR TRAVELING
+/*METHODS FOR THE ROVER TO TRAVEL*/
 void stop(void) //Stop
 {
-  digitalWrite(leftMotorPin, LOW);
-  digitalWrite(rightMotorPin, LOW);
-}
-void collisionStop(void) //Stop
-{
-
-  digitalWrite(leftMotorPin, LOW);
-  digitalWrite(rightMotorPin, LOW);
-  delay(10000);
-  //  ble.println(" Rover is stopped, use directional keys to drive, and button 3 for self driving");
   digitalWrite(leftMotorPin, LOW);
   digitalWrite(rightMotorPin, LOW);
 }
@@ -281,17 +262,18 @@ void reverse (char a, char b)
 void turnLeft(char a, char b)
 {
   analogWrite (leftMotorPin, a);
-  digitalWrite(leftDirectionPin, HIGH);
+  digitalWrite(leftDirectionPin, LOW);
   analogWrite (rightMotorPin, b);
-  digitalWrite(rightDirectionPin, LOW);
+  digitalWrite(rightDirectionPin, HIGH);
+
 }
 
 void turnRight(char a, char b)
 {
   analogWrite (leftMotorPin, a);
-  digitalWrite(leftDirectionPin, LOW);
+  digitalWrite(leftDirectionPin, HIGH);
   analogWrite (rightMotorPin, b);
-  digitalWrite(rightDirectionPin, HIGH);
+  digitalWrite(rightDirectionPin, LOW);
 }
 
 /*WIRE EVENT*/
@@ -306,20 +288,19 @@ void receiveEvent(int howMany) {
     String str = "";
     while (1 < Wire.available()) { // loop through all but the last
       char c = Wire.read(); // receive byte as a character
-      Serial.print(c);// print the character
       str.concat(c);
     }
     int x = Wire.read();    // receive byte as an integer
     //passback = str + x ;
-    if (x < 10 && str.equals("L")) {
+    if (x < 10 && x > 0 && str.equals("L")) {
       passback = "DontTurnLeft";
       delay(250);
     }
-    else if (x < 10 && str.equals("R")) {
+    else if (x < 10 && x > 0 && str.equals("R")) {
       passback = "DontTurnRight";
       delay(250);
     }
-    else if (x < 10 && str.equals("F")) {
+    else if (x < 10 && x > 0 && str.equals("F")) {
       passback = "FrontDistance";
       distance = x;
       delay(250);
@@ -328,24 +309,29 @@ void receiveEvent(int howMany) {
     }
   }
 }
+void updateGPS() {
+  int t = millis();
+  while (gpsSerial.available() > 0 && millis() < (t + 1000)) {
+    if (gps.encode(gpsSerial.read()))
+    {
+      Serial.println("Calculating");
+      rLat = gps.location.lat();
+      rLng = gps.location.lng();
 
-////////////////////////////////////////This can be a function that can be called once
-void radioFunc() {
-  if (radio.available()) {
-    bool done = false;
-    while (!done) {
-      done = radio.read(&gpsCord_Receive, sizeof(gpsCord_Receive));
-      for (int i = 0; i < 2; i++) {
-        Serial.print("Got Coordinates...");
-        Serial.print(gpsCord_Receive[i]);
-        Serial.print("   ");
-      }
-      Serial.println();
+      Serial.print("Lat: ");
+      Serial.print(rLat, 6);
+      Serial.print(", ");
+      Serial.print("Lng: ");
+      Serial.print(rLng, 6);
+      delay(100);
+
+      Serial.println("GPS Degree is");
+      Serial.print(gps.course.deg());
+      //delay(1300);
     }
   }
-  else {
-    Serial.print("Failed");
-  }
-  delay(20);
 }
+
+////////////////////////////////////////This can be a function that can be called once
+
 ///////////////////////////////////////////////////////////////////////////////////////////
