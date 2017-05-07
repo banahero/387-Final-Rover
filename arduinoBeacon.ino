@@ -1,6 +1,7 @@
 /*
  * The code for the beacon that sends out it's GPS position. 
  * Meant to be picked up by the rover so the rover can travel to the beacon's location
+ * The RF24 code is based on some of the examples in the RF24-master library
  */
 
 // These three are from RF24-master library
